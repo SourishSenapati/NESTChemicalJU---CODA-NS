@@ -1,0 +1,20 @@
+# Model Artifacts (Huge Files)
+*.pt
+*.pth
+*.bin
+*.onnx
+*.safetensors
+coda_neuro_symbolic/
+coda_zero_loss/
+results/
+logs/
+tmp/
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# OS
+.DS_Store

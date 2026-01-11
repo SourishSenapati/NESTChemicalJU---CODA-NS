@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CODA-NS | Neuro-Symbolic Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; padding: 20px; }
+        .container { display: flex; gap: 20px; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); width: 100%; }
+        .input-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; color: #333; }
+        input, textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; }
+        button { background: #000; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; }
+        button:hover { background: #333; }
+        
+        /* Status Colors */
+        .CRITICAL { border-left: 5px solid #dc3545; }
+        .RISK { border-left: 5px solid #ffc107; }
+        .CLEAN { border-left: 5px solid #28a745; }
+
+        /* Gap B: Patient Table */
+        table { width: 100%; margin-top: 15px; border-collapse: collapse; }
+        th, td { padding: 10px; border-bottom: 1px solid #eee; text-align: left; }
+        th { font-size: 0.85em; color: #888; text-transform: uppercase; }
+        
+        /* Gap C: Collaboration */
+        .collab-tools { margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px; display: none; }
+        .toast { background: #333; color: white; padding: 10px; position: fixed; bottom: 20px; right: 20px; border-radius: 5px; display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card" style="flex: 1;">
+            <h2>🏥 Site Ingestion</h2>
+            <div class="input-group">
+                <label>Site ID</label>
+                <input type="number" id="site_id" value="201">
+            </div>
+            <div class="input-group">
+                <label>Operational Metrics</label>
+                <input type="number" id="missing" placeholder="Missing Visits">
+                <input type="number" id="queries" placeholder="Open Queries">
+                <input type="number" id="sae" placeholder="SAE Count">
+            </div>
+            <div class="input-group">
+                <label>Unstructured Data (Protocol/Email Log)</label>
+                <textarea id="protocol" rows="3" placeholder="Paste CRA Email or PDF Extract..."></textarea>
+            </div>
+            <button onclick="analyze()">⚡ Harmonize & Analyze</button>
+        </div>
+
+        <div class="card" id="result_card" style="flex: 1; display:none;">
+            <h2 id="status_header">Analysis Result</h2>
+            <p id="narrative" style="font-size: 1.1em; color: #555;"></p>
+            
+            <h3>👤 Patient Drill-Down</h3>
+            <table id="patient_table">
+                <thead><tr><th>Patient ID</th><th>Status</th><th>Gap</th></tr></thead>
+                <tbody id="patient_body"></tbody>
+            </table>
+
+            <div class="collab-tools" id="collab">
+                <h3>🤝 Collaboration</h3>
+                <textarea placeholder="Add note for Medical Monitor..."></textarea>
+                <button onclick="sendAlert()" style="background: #0056b3; margin-top:10px;">Authorize Protocol / Send Alert</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast">Alert Sent to CRA Team via SMTP.</div>
+
+    <script>
+        async function analyze() {
+            const site_id = document.getElementById('site_id').value;
+            const missing = document.getElementById('missing').value;
+            const queries = document.getElementById('queries').value;
+            const sae = document.getElementById('sae').value;
+            const protocol_text = document.getElementById('protocol').value;
+
+            if (!site_id || !missing || !queries || !sae) {
+                alert("Please fill in basic site metrics.");
+                return;
+            }
+
+            const payload = {
+                site_id: parseInt(site_id),
+                missing: parseInt(missing),
+                queries: parseInt(queries),
+                sae: parseInt(sae),
+                protocol_text: protocol_text
+            };
+
+            try {
+                const response = await fetch('http://localhost:8000/analyze_site', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                // Render
+                const card = document.getElementById('result_card');
+                card.style.display = 'block';
+                card.className = "card " + data.status;
+                
+                document.getElementById('status_header').innerText = `Status: ${data.status} (Risk Score: ${data.risk_score})`;
+                document.getElementById('narrative').innerText = data.narrative;
+                
+                // Render Patients (Gap B)
+                const tbody = document.getElementById('patient_body');
+                tbody.innerHTML = '';
+                if(data.patients) {
+                    data.patients.forEach(p => {
+                        tbody.innerHTML += `<tr><td>${p.patient_id}</td><td>${p.status}</td><td>${p.missing_pages} Pages</td></tr>`;
+                    });
+                }
+
+                // Show Collab Tools (Gap C)
+                document.getElementById('collab').style.display = 'block';
+            } catch (e) {
+                alert("Error: " + e);
+            }
+        }
+
+        function sendAlert() {
+            const toast = document.getElementById('toast');
+            toast.style.display = 'block';
+            setTimeout(() => toast.style.display = 'none', 3000);
+        }
+    </script>
+</body>
+</html>
